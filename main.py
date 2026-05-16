@@ -1,161 +1,18 @@
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-
+from crawler import crawl_info
+from llm import weather_forecast
 import requests
-import time
 import os
 
+morning_weather, morning_rain, afternoon_rain, afternoon_weather, lowest_temp, highest_temp = crawl_info()
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-# =========================
-# Slack Webhook URL
-# =========================
-# WEBHOOK_URL = "여기에_슬랙_웹훅_URL_넣기"
 
-# =========================
-# Selenium 설정
-# =========================
-options = webdriver.ChromeOptions()
+message = weather_forecast(morning_weather,
+                            morning_rain,
+                            afternoon_rain,
+                            afternoon_weather,
+                            lowest_temp,
+                            highest_temp)
 
-# 브라우저 창 숨김
-options.add_argument("--headless=new")
-
-# 불필요한 로그 제거
-options.add_argument("--log-level=3")
-
-driver = webdriver.Chrome(
-    service=Service(ChromeDriverManager().install()),
-    options=options
-)
-
-# =========================
-# 네이버 날씨 접속
-# =========================
-driver.get("https://weather.naver.com/")
-
-# 페이지 로딩 대기
-time.sleep(3)
-
-# =========================
-# 내일 오전 강수확률
-# =========================
-morning_rain = driver.find_element(
-    By.CSS_SELECTOR,
-    "#cardWeekScroll > ul > li:nth-child(2) > div > div > div.cell_weather > span:nth-child(1) > strong > span.rainfall"
-).text
-
-# =========================
-# 내일 오전 날씨
-# =========================
-morning_weather = driver.find_element(
-    By.CSS_SELECTOR,
-    "#cardWeekScroll > ul > li:nth-child(2) > div > div > div.cell_weather > span:nth-child(1) > i"
-).get_attribute("data-tooltip")
-
-# =========================
-# 내일 오후 날씨
-# =========================
-afternoon_weather = driver.find_element(
-    By.CSS_SELECTOR,
-    "#cardWeekScroll > ul > li:nth-child(2) > div > div > div.cell_weather > span:nth-child(2) > i"
-).get_attribute("data-tooltip")
-
-# =========================
-# 내일 오후 강수확률
-# =========================
-afternoon_rain = driver.find_element(
-    By.CSS_SELECTOR,
-    "#cardWeekScroll > ul > li:nth-child(2) > div > div > div.cell_weather > span:nth-child(2) > strong > span.rainfall"
-).text
-
-# =========================
-# 내일 최저기온
-# =========================
-lowest_temp = driver.find_element(
-    By.CSS_SELECTOR,
-    "#cardWeekScroll > ul > li:nth-child(2) > div > div > div.cell_temperature > strong > span.lowest"
-).text
-
-# =========================
-# 내일 최고기온
-# =========================
-highest_temp = driver.find_element(
-    By.CSS_SELECTOR,
-    "#cardWeekScroll > ul > li:nth-child(2) > div > div > div.cell_temperature > strong > span.highest"
-).text
-
-# =========================
-# 문자열 정리
-# =========================
-morning_rain = morning_rain.replace("강수확률", "").strip()
-afternoon_rain = afternoon_rain.replace("강수확률", "").strip()
-
-lowest_temp = lowest_temp.replace("최저기온", "").strip()
-highest_temp = highest_temp.replace("최고기온", "").strip()
-
-# =========================
-# 브라우저 종료
-# =========================
-driver.quit()
-
-# =========================
-# Slack 메시지 생성
-# =========================
-message = f"""
-<!channel>
-📅 내일 날씨 알림
-
-🌅 오전 날씨: {morning_weather}
-☔ 오전 강수확률: {morning_rain}
-
-🌇 오후 날씨: {afternoon_weather}
-☔ 오후 강수확률: {afternoon_rain}
-
-🌡 최저 기온: {lowest_temp}
-🌡 최고 기온: {highest_temp}
-"""
-
-from langchain_openai import ChatOpenAI
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.prompts import PromptTemplate
-from dotenv import load_dotenv
-
-load_dotenv()
-
-llm = ChatOpenAI(
-    model="gpt-4o-mini",
-    temperature=0.5
-)
-template = """
-너는 조사병단을 이끄는 리바이인데 지금은 임시적으로 기상캐스터 역할을 하고 있다.
-아래 정보를 토대로 리바이 병장의 특유의 말투를 살려서 날씨 알림 멘트를 해줘
-
- 내일 날씨 정보
-
- 오전 날씨: {morning_weather}
- 오전 강수확률: {morning_rain}
- 오후 날씨: {afternoon_weather}
- 오후 강수확률: {afternoon_rain}
-
- 최저 기온: {lowest_temp}
- 최고 기온: {highest_temp}
-"""
-
-prompt = PromptTemplate.from_template(template)
-outputparser = StrOutputParser()
-chain = prompt | llm | outputparser
-respond = chain.invoke({"morning_weather" : morning_weather, 
-                     "morning_rain" : morning_rain,
-                     "afternoon_weather" : afternoon_weather,
-                     "afternoon_rain" : afternoon_rain,
-                     "lowest_temp" : lowest_temp,
-                     "highest_temp" : highest_temp
-})
-message = "<!channel>\n" + respond 
-# =========================
-# Slack 전송
-# =========================
 requests.post(
     WEBHOOK_URL,
     json={
