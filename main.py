@@ -116,8 +116,43 @@ message = f"""
 🌡 최고 기온: {highest_temp}
 """
 
-print(message)
+from langchain_openai import ChatOpenAI
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import PromptTemplate
+from dotenv import load_dotenv
 
+load_dotenv()
+
+llm = ChatOpenAI(
+    model="gpt-4o-mini",
+    temperature=0.5
+)
+template = """
+너는 조사병단을 이끄는 리바이인데 지금은 임시적으로 기상캐스터 역할을 하고 있다.
+아래 정보를 토대로 리바이 병장의 특유의 말투를 살려서 날씨 알림 멘트를 해줘
+
+ 내일 날씨 정보
+
+ 오전 날씨: {morning_weather}
+ 오전 강수확률: {morning_rain}
+ 오후 날씨: {afternoon_weather}
+ 오후 강수확률: {afternoon_rain}
+
+ 최저 기온: {lowest_temp}
+ 최고 기온: {highest_temp}
+"""
+
+prompt = PromptTemplate.from_template(template)
+outputparser = StrOutputParser()
+chain = prompt | llm | outputparser
+respond = chain.invoke({"morning_weather" : morning_weather, 
+                     "morning_rain" : morning_rain,
+                     "afternoon_weather" : afternoon_weather,
+                     "afternoon_rain" : afternoon_rain,
+                     "lowest_temp" : lowest_temp,
+                     "highest_temp" : highest_temp
+})
+message = "<!channel>\n" + respond 
 # =========================
 # Slack 전송
 # =========================
